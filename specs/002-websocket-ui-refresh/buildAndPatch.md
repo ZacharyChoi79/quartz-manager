@@ -119,6 +119,15 @@ cd ..
 ## 4. 빌드 — quartz-manager UI 웹자(jar) 만들기
 
 **방법 A (권장): 로컬 작업 트리에서 직접 빌드.** push 없이 지금 수정한 코드가 그대로 반영된다.
+저장소 루트의 [buildUI.bat](../../buildUI.bat) 한 번이면 된다.
+
+```powershell
+cd C:\...\quartz-manager
+.\buildUI.bat
+```
+
+`buildUI.bat` 은 JDK 확인 → (`mvn` 이 없으면 `mvnw.cmd` 사용) 빌드·설치 → jar 크기(4MB 이상)와
+번들 안의 `Last fired:` 문구 확인(§4-1)까지 자동으로 수행한다. 직접 실행하려면 아래와 같다.
 
 ```powershell
 cd quartz-manager-parent
@@ -147,6 +156,8 @@ buildQuartzManager.bat        # GitHub 에서 clone 후 -Pbuild-webjar 로 빌�
 > 무관하므로 포함하지 않는다.
 
 ### 4-1. 빌드 결과 검증 (반드시 수행)
+
+`buildUI.bat` 을 썼다면 크기·문구 확인은 이미 자동으로 수행된다. 수동으로 확인하려면 아래를 따른다.
 
 ```powershell
 $jar = "$env:USERPROFILE\.m2\repository\it\fabioformosa\quartz-manager\quartz-manager-starter-ui\5.0.1\quartz-manager-starter-ui-5.0.1.jar"
