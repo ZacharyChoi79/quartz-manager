@@ -123,8 +123,17 @@ cd ..
 
 ```powershell
 cd C:\...\quartz-manager
-.\buildUI.bat
+.\buildUI.bat                       # Maven 기본 로컬 저장소(%USERPROFILE%\.m2) 사용
+.\buildUI.bat D:\workspace\localrepo   # 지정한 로컬 저장소 사용 (portable/오프라인 저장소)
+.\buildUI.bat D:\workspace\localrepo --replace   # 빌드 전에 저장소의 기존 jar 를 .bak 로 백업한 뒤 교체
 ```
+
+`--replace`(또는 `-r`)를 주면 로컬 저장소에 이미 있는 `quartz-manager-starter-ui-5.0.1.jar` 를
+`quartz-manager-starter-ui-5.0.1.jar.bak.<타임스탬프>` 로 같은 폴더에 백업한 뒤 새 jar 로 교체한다
+(옵션이 없으면 백업 없이 덮어쓴다). 백업 파일은 `.jar` 로 끝나지 않으므로 Maven 이 의존성으로 쓰지 않는다.
+
+파라미터로 로컬 저장소 경로를 주면 Maven 에 `-Dmaven.repo.local` 로 전달하고, 빌드된 jar 도 그 저장소에
+설치되며 스크립트의 검증 단계도 그 경로의 jar 를 확인한다.
 
 `buildUI.bat` 은 JDK 확인 → (`mvn` 이 없으면 `mvnw.cmd` 사용) 빌드·설치 → jar 크기(4MB 이상)와
 번들 안의 `Last fired:` 문구 확인(§4-1)까지 자동으로 수행한다. 직접 실행하려면 아래와 같다.
