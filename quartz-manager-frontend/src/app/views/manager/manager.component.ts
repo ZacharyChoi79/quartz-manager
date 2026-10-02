@@ -141,6 +141,7 @@ export class ManagerComponent implements OnInit, OnDestroy {
   private readonly subscriptions: Subscription[] = [];
   private logsSubscription: Subscription;
   private progressSubscription: Subscription;
+  private progressRowSubscriptions: {[triggerDetailKey: string]: Subscription} = {};
   private noticeTimer: ReturnType<typeof setTimeout>;
 
   constructor(
@@ -164,6 +165,8 @@ export class ManagerComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.subscriptions.forEach(subscription => subscription.unsubscribe());
     this.unsubscribeFromTriggerTopics();
+    Object.values(this.progressRowSubscriptions).forEach(subscription => subscription.unsubscribe());
+    this.progressRowSubscriptions = {};
     if (this.noticeTimer) {
       clearTimeout(this.noticeTimer);
     }
@@ -299,6 +302,7 @@ export class ManagerComponent implements OnInit, OnDestroy {
     const subscription = this.triggerService.fetchTriggers().subscribe({
       next: triggerKeys => {
         this.triggerKeys = triggerKeys || [];
+        this.syncProgressRowSubscriptions();
         this.fetchTriggerDetails(this.triggerKeys);
         if (this.triggerKeys.length > 0) {
           this.selectTrigger(this.selectedTriggerKey || this.triggerKeys[0], false);
@@ -628,6 +632,7 @@ export class ManagerComponent implements OnInit, OnDestroy {
       next: () => {
         this.operationNotice = 'Trigger unscheduled.';
         this.triggerKeys = this.triggerKeys.filter(currentTriggerKey => !this.sameTriggerKey(currentTriggerKey, triggerKey));
+        this.syncProgressRowSubscriptions();
         delete this.triggerDetailsByName[this.getTriggerDetailKey(triggerKey)];
         this.selectedTriggerKey = this.triggerKeys[0];
         this.selectedTrigger = this.selectedTriggerKey
@@ -862,8 +867,11 @@ export class ManagerComponent implements OnInit, OnDestroy {
   }
 
   getProgressLabel(): string {
-    if (!this.progress || this.progress.percentage < 0) {
+    if (!this.progress) {
       return 'Waiting for progress events';
+    }
+    if (!(this.progress.percentage >= 0)) {
+      return `Last fired: ${this.formatDateTime(this.progress.previousFireTime) || '-'} · Next: ${this.formatDateTime(this.progress.nextFireTime) || '-'}`;
     }
     return `${this.progress.percentage}% / ${this.progress.timesTriggered || 0} fired`;
   }
@@ -1149,7 +1157,10 @@ export class ManagerComponent implements OnInit, OnDestroy {
 
     this.progressSubscription = this.progressRxWebsocketService.watch(`/topic/progress/${triggerKey.name}`)
       .pipe(map((msg: any) => JSON.parse(msg.body)))
-      .subscribe(progress => this.ngZone.run(() => this.progress = progress), err => console.log(err));
+      .subscribe(progress => this.ngZone.run(() => {
+        this.progress = progress;
+        this.applyProgressToTrigger(triggerKey, progress);
+      }), err => console.log(err));
   }
 
   private unsubscribeFromTriggerTopics() {
@@ -1174,9 +1185,58 @@ export class ManagerComponent implements OnInit, OnDestroy {
     }, ...this.logs].slice(0, 50);
   }
 
+  private applyProgressToTrigger(triggerKey: TriggerKey, progress: TriggerFiredBundle) {
+    const trigger = this.triggerDetailsByName[this.getTriggerDetailKey(triggerKey)];
+    if (!trigger || !progress) {
+      return;
+    }
+    const nextFireTime = this.toValidDate(progress.nextFireTime);
+    const previousFireTime = this.toValidDate(progress.previousFireTime);
+    const targets = [trigger];
+    if (this.selectedTrigger && this.selectedTrigger !== trigger && this.sameTriggerKey(this.selectedTriggerKey, triggerKey)) {
+      targets.push(this.selectedTrigger);
+    }
+    targets.forEach(target => {
+      if (nextFireTime) {
+        target.nextFireTime = nextFireTime;
+      }
+      if (previousFireTime) {
+        target.previousFireTime = previousFireTime;
+      }
+    });
+  }
+
+  private syncProgressRowSubscriptions() {
+    const currentKeys = new Set(this.triggerKeys.map(triggerKey => this.getTriggerDetailKey(triggerKey)));
+    Object.keys(this.progressRowSubscriptions)
+      .filter(detailKey => !currentKeys.has(detailKey))
+      .forEach(detailKey => {
+        this.progressRowSubscriptions[detailKey].unsubscribe();
+        delete this.progressRowSubscriptions[detailKey];
+      });
+    this.triggerKeys.forEach(triggerKey => {
+      const detailKey = this.getTriggerDetailKey(triggerKey);
+      if (this.progressRowSubscriptions[detailKey]) {
+        return;
+      }
+      this.progressRowSubscriptions[detailKey] = this.progressRxWebsocketService.watch(`/topic/progress/${triggerKey.name}`)
+        .pipe(map((msg: any) => JSON.parse(msg.body)))
+        .subscribe(progress => this.ngZone.run(() => this.applyProgressToTrigger(triggerKey, progress)), err => console.log(err));
+    });
+  }
+
+  private toValidDate(value: string | Date): Date {
+    if (!value) {
+      return null;
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
   private upsertTriggerKey(triggerKey: TriggerKey) {
     if (!this.triggerKeys.some(currentTriggerKey => this.sameTriggerKey(currentTriggerKey, triggerKey))) {
       this.triggerKeys = [triggerKey, ...this.triggerKeys];
+      this.syncProgressRowSubscriptions();
     }
   }
 

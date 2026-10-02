@@ -116,7 +116,7 @@
                   <div class="drawer-title"><div><span class="chip" [ngClass]="getSelectedTriggerStateClass()">{{ getSelectedTriggerState() }}</span><h2>{{ selectedTriggerKey.name }}</h2><div class="caption">{{ getSelectedTriggerGroup() }} / linked to {{ getSelectedJobName() }}</div></div><button type="button" class="drawer-close" (click)="closeDetailDrawer()">Close</button></div>
                   <div class="tabs"><button type="button" class="tab active">Overview</button><button type="button" class="tab" data-roadmap="Per-trigger execution history is on the roadmap">Executions</button><button type="button" class="tab" (click)="selectPage('events')">Logs</button></div>
                   <div class="field-grid">
-                    <div class="field"><label>Previous fire</label><strong>{{ selectedTrigger?.timesTriggered ? 'tracked by progress events' : 'not exposed' }}</strong></div>
+                    <div class="field"><label>Previous fire</label><strong>{{ getTriggerPreviousFireLabel(selectedTriggerKey) }}</strong></div>
                     <div class="field"><label>Next fire</label><strong>{{ formatDateTime(selectedTrigger?.nextFireTime) || '-' }}</strong></div>
                     <div class="field"><label>Priority</label><strong>{{ selectedTrigger?.priority || '-' }}</strong></div>
                     <div class="field"><label>Calendar</label><strong>{{ selectedTrigger?.calendarName || 'none' }}</strong></div>
@@ -140,7 +140,7 @@
               </div>
               <div class="field-grid top-space">
                 <div class="field"><label>Logs received</label><strong>{{ logs.length }}</strong></div>
-                <div class="field"><label>Current progress</label><strong>{{ getProgressPercentage() }}%</strong></div>
+                <div class="field"><label>Current progress</label><strong>{{ progress?.percentage >= 0 ? getProgressPercentage() + '%' : '-' }}</strong></div>
                 <button type="button" class="field field-button" data-roadmap="Misfire analytics are on the roadmap"><label>Misfires</label><strong>Roadmap</strong></button>
                 <button type="button" class="field field-button" data-roadmap="Recovering jobs endpoint is on the roadmap"><label>Recovering jobs</label><strong>Roadmap</strong></button>
               </div>
