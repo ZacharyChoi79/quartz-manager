@@ -1,6 +1,9 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+rem Capture the script directory BEFORE parsing arguments: SHIFT also shifts %0, which
+rem would break any later %~dp0 reference.
+set "SCRIPT_DIR=%~dp0"
+cd /d "%SCRIPT_DIR%"
 
 rem buildUI.bat -- Builds the quartz-manager UI webjar (quartz-manager-starter-ui)
 rem from THIS working tree (including uncommitted frontend changes) and installs
@@ -60,7 +63,7 @@ if defined LOCAL_REPO (
 )
 echo [buildUI] Maven local repository: %REPO_ROOT%
 
-set "PARENT_DIR=%~dp0quartz-manager-parent"
+set "PARENT_DIR=%SCRIPT_DIR%quartz-manager-parent"
 set "JAR_PATH=%REPO_ROOT%\it\fabioformosa\quartz-manager\quartz-manager-starter-ui\5.0.1\quartz-manager-starter-ui-5.0.1.jar"
 set "CHECK_DIR=%TEMP%\quartz-manager-ui-check"
 set "MIN_JAR_BYTES=4000000"
@@ -69,7 +72,7 @@ if not exist "%PARENT_DIR%\pom.xml" (
     echo [buildUI][ERROR] quartz-manager-parent\pom.xml not found. Run this script from the quartz-manager repository root.
     exit /b 1
 )
-if not exist "%~dp0quartz-manager-frontend\package.json" (
+if not exist "%SCRIPT_DIR%quartz-manager-frontend\package.json" (
     echo [buildUI][ERROR] quartz-manager-frontend\package.json not found.
     exit /b 1
 )
