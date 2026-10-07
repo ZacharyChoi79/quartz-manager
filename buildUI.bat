@@ -143,7 +143,12 @@ if errorlevel 1 exit /b 1
 :skipbackup
 
 echo [buildUI] Building the UI webjar ^(%BUILD_PROFILE%^)...
+echo [buildUI] Maven being used:
+call "%MVN_CMD%" -v
+if errorlevel 1 goto mvnbroken
+echo.
 set "LOG_FILE=%SCRIPT_DIR%buildUI.log"
+echo [buildUI] Maven command: "%MVN_CMD%" "%REPO_ARG%" "%BUILD_PROFILE%" "-Dfrontend.skipInstall=%SKIP_INSTALL%" -DskipTests -pl quartz-manager-starter-ui -am install
 echo [buildUI] Maven output is saved to: %LOG_FILE% ^(it is shown after the build finishes^)
 pushd "%PARENT_DIR%"
 call "%MVN_CMD%" "%REPO_ARG%" "%BUILD_PROFILE%" "-Dfrontend.skipInstall=%SKIP_INSTALL%" -DskipTests -pl quartz-manager-starter-ui -am install > "%LOG_FILE%" 2>&1
@@ -203,10 +208,19 @@ echo   --maven-node, -m Use the Maven-managed Node/npm ^(-Pbuild-webjar, needs i
 echo   Example: buildUI.bat D:\workspace\localrepo --replace
 goto end
 
+:mvnbroken
+echo.
+echo [buildUI][ERROR] "%MVN_CMD%" -v failed: Maven itself cannot run. Check JAVA_HOME ^(must point to a JDK 21+ folder^), the Maven installation, and PATH.
+echo   JAVA_HOME=%JAVA_HOME%
+exit /b 1
+
 :mvnfailed
+set "LOG_BYTES=0"
+for %%F in ("%LOG_FILE%") do set "LOG_BYTES=%%~zF"
 echo.
 echo [buildUI][ERROR] Maven build failed ^(exit code %MVN_EXIT%^). Full log: %LOG_FILE%
 echo.
+if "%LOG_BYTES%"=="0" echo [buildUI][ERROR] The log is EMPTY: Maven produced no output. Run the printed Maven command manually in quartz-manager-parent to see the cause.
 echo ---- Lines containing errors ----
 findstr /i /c:"[ERROR]" /c:"npm ERR" /c:"Could not" /c:"Failed to execute" /c:"BUILD FAILURE" /c:"Cannot run program" "%LOG_FILE%"
 echo.
