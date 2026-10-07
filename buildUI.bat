@@ -95,6 +95,12 @@ if not exist "%SCRIPT_DIR%quartz-manager-frontend\package.json" (
 echo [buildUI] Checking required tools...
 where java >nul 2>&1 || (echo [buildUI][ERROR] java not found on PATH. Install JDK 25 ^(minimum 21^) and set JAVA_HOME. & exit /b 1)
 
+rem A trailing backslash in JAVA_HOME breaks mvn.cmd (the quoted path ends with \"). Strip it.
+if not defined JAVA_HOME goto javahomeok
+if "%JAVA_HOME:~-1%"=="\" set "JAVA_HOME=%JAVA_HOME:~0,-1%"
+if not exist "%JAVA_HOME%\bin\java.exe" echo [buildUI][WARN] JAVA_HOME does not contain bin\java.exe: %JAVA_HOME%
+:javahomeok
+
 set "BUILD_PROFILE=-Pbuild-webjar-local-npm"
 set "SKIP_INSTALL=false"
 if defined MAVEN_NODE goto skipnodecheck
@@ -212,6 +218,8 @@ goto end
 echo.
 echo [buildUI][ERROR] "%MVN_CMD%" -v failed: Maven itself cannot run. Check JAVA_HOME ^(must point to a JDK 21+ folder^), the Maven installation, and PATH.
 echo   JAVA_HOME=%JAVA_HOME%
+echo   Maven found at:
+where mvn
 exit /b 1
 
 :mvnfailed
