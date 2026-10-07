@@ -132,7 +132,11 @@ if not exist "%REPO_ROOT%\org\codehaus\mojo\exec-maven-plugin\3.5.0\exec-maven-p
 :preflightdone
 
 set "MVN_CMD="
-where mvn >nul 2>&1 && set "MVN_CMD=mvn"
+rem Resolve the full path of mvn.cmd: PATH may also contain an extensionless "mvn" shell
+rem script (Maven's bin folder), which cmd would pick first for a quoted bare "mvn".
+for /f "delims=" %%M in ('where mvn.cmd 2^>nul') do if not defined MVN_CMD set "MVN_CMD=%%M"
+if not defined MVN_CMD for /f "delims=" %%M in ('where mvn.bat 2^>nul') do if not defined MVN_CMD set "MVN_CMD=%%M"
+if defined MVN_CMD echo [buildUI] Using Maven: %MVN_CMD%
 if not defined MVN_CMD (
     if exist "%PARENT_DIR%\mvnw.cmd" (
         set "MVN_CMD=%PARENT_DIR%\mvnw.cmd"
