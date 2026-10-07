@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report
-- 버전 변경: 1.1.0 → 1.1.1 (PATCH: 사실 오류 정정)
-- 수정된 원칙: VI — 갱신 의무 표에서 존재하지 않는 "Triggers 페이지 상세의 Previous fire" 행 삭제,
-  "Triggers 페이지 상세의 Next fire, Schedule summary" 를 실제 요소인 "Schedule summary 문구 내
-  Next fire" 로 정정, 요소 신규 추가 금지 문장 추가. 갱신 대상은 5곳.
-- 추가/삭제된 섹션: 없음
-- 후속 TODO: 없음 (spec 002 는 이미 5곳 기준으로 정정됨)
+- 버전 변경: 1.1.1 → 1.2.0 (MINOR: 새 원칙 추가)
+- 수정된 원칙: 없음 (원칙 II·III 은 변경 없이 원칙 VII 이 폐쇄망 요건을 근거로 한 예외 처리 방식을 명시)
+- 추가된 원칙: VII. 폐쇄망 운영: 외부 CDN·외부 접속 의존 금지
+- 추가/삭제된 섹션: 개발 워크플로 7번 단계 추가, 삭제 없음
+- 후속 TODO: Material Icons 자체 호스팅(원칙 VII 표의 위반 항목) — 별도 spec(예: 003)으로 specify/plan/tasks/implement
+  필요. 헌법 자체의 미정 항목은 없음
 -->
 
 # Quartz Manager 헌법
@@ -101,6 +101,46 @@ MUST NOT 한다. 근거 분석(2026-10-02, `manager.component` 기준)은 다음
 근거: 서버가 이미 발행하는 값을 화면이 쓰지 않으면 "실시간 업데이트" 기능이 실제로는 동작하지 않는
 것처럼 보인다(진행 메시지는 수신되지만 Next fire 가 갱신되지 않던 문제).
 
+### VII. 폐쇄망 운영: 외부 CDN·외부 접속 의존 금지
+
+실제 운영 환경은 **폐쇄망**이다. 운영 서버가 서빙하는 화면(`quartz-manager-ui`)은 인터넷 없이 모든 기능과
+표시가 완전해야 하며, 빌드 과정도 이 화면 자산을 만들기 위해 외부에 접속하지 않아야 한다.
+
+- 화면이 **자동으로 가져오는** 외부 자원(CDN 폰트, 스크립트, 스타일시트, 이미지, `@import`, 분석/추적 코드,
+  원격 폰트 `preconnect` 등)을 새로 추가하는 변경은 MUST NOT 한다. 필요한 자원은 저장소 안(`src/assets` 등)에
+  포함하여 **자체 호스팅**한다.
+- 프런트엔드 빌드(`ng build`)는 외부 접속 없이 성공해야 한다(MUST). 특히 Google Fonts 같은 외부 주소를
+  `index.html`에서 링크하면 Angular 프로덕션 빌드의 폰트 인라인이 빌드 중에 해당 주소에 접속하므로 MUST NOT 한다.
+- 빌드 결과물(`dist`, webjar)에 외부 폰트·CDN 주소가 남아 있지 않음을 검증한다: `dist` 안에서
+  `googleapis`, `gstatic`, `fontawesome` 등 외부 자원 주소의 **자동 로드** 참조가 0건이어야 한다(MUST).
+- 아래는 자동으로 접속하지 않으므로 외부 주소가 있어도 허용한다(MAY): 사용자가 클릭할 때만 이동하는 링크
+  (GitHub 등), `og:url`/`og:image` 같은 메타 정보, 주석·라이선스 문구·문자열 상수, XML/SVG 네임스페이스.
+
+**현재 확인된 의존과 필요한 조치 (2026-10-07 `quartz-manager-frontend` 전수 확인)**
+
+| 외부 의존 | 위치 | 상태 |
+|-----------|------|------|
+| Material Icons CSS `fonts.googleapis.com/icon?family=Material+Icons` | `src/index.html` | **위반** — 빌드 중 접속(인증서 오류 사례 발생)과 운영 브라우저 접속 모두 문제. 자체 호스팅 필요 |
+| Material Icons woff2 `fonts.gstatic.com/.../flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2` | 빌드 결과 `dist/index.html`의 `@font-face` | 위 의존의 부산물 — 자체 호스팅 시 사라짐 |
+| Roboto 폰트 | `roboto-fontface` 패키지 번들 | 적합(내장) |
+| `use.fontawesome.com` 스크립트 | `src/index.html` | 주석 처리 — 적합(활성화 금지) |
+| 번들 JS 내 외부 URL | github.com, jwt.io 등 | 문자열일 뿐 자동 접속 없음 — 적합 |
+| qssb `dashboard.html`, `quartz-status.html` | qssb 정적 리소스 | 외부 URL 없음 — 적합 |
+
+- Material Icons 자체 호스팅의 표준 변경 범위는 3개 파일이다: ① `src/assets/fonts/material-icons/material-icons.woff2`
+  (신규, 약 128KB, Apache-2.0), ② 같은 폴더의 `material-icons.css`(신규, `@font-face`는 상대 경로,
+  `.material-icons` 규칙), ③ `src/index.html`의 Google Fonts 링크 1줄을 로컬 CSS 링크
+  (`assets/fonts/material-icons/material-icons.css`, 파비콘과 같은 상대 경로 방식)로 교체. `angular.json`,
+  `package.json`, 컴포넌트 코드는 변경하지 않는다.
+- 이 변경은 WebSocket 화면 갱신 기능(spec 002)과 목적이 다르므로 **별도 spec으로 분리**하여 수행한다(원칙 II·III).
+  폐쇄망 요건을 근거로 한 변경은 원칙 III(최소 수정)의 예외로 허용하되, 해당 spec의 changelog에 근거와 변경
+  파일을 기록해야 한다(원칙 V).
+- 빌드 환경(개발 PC)의 외부 접속 제약(Node/npm/Maven 플러그인 다운로드)은 운영 화면 자산과 별개이며
+  `buildAndPatch.md`의 로컬 저장소 캐시·`node_modules` 반입 절차로 다룬다.
+
+근거: 폐쇄망에서는 외부 폰트가 로드되지 않아 `mat-icon`이 아이콘 대신 글자(`menu`, `event`)로 보이고, 빌드 중
+외부 접속이 필요하면 사설 인증서·차단 환경에서 빌드가 실패한다.
+
 ## 추가 제약 사항
 
 - 대상 프런트엔드: `quartz-manager-frontend`. 서버 참조: qssb (읽기 전용).
@@ -113,8 +153,10 @@ MUST NOT 한다. 근거 분석(2026-10-02, `manager.component` 기준)은 다음
 2. 최소 수정 원칙에 따라 변경 대상 파일을 먼저 식별하고 plan 에 나열한다.
 3. 구현 후 변경 파일 목록과 compare 내용을 `spec-{번호}-changelog.md` 에 기록한다.
 4. 변경 검증(프런트엔드 빌드/테스트, WebSocket 연결 동작 확인)을 완료한 뒤 완료로 보고한다.
-5. plan 단계의 헌법 점검(Constitution Check)은 위 6개 원칙 준수를 확인해야 한다.
+5. plan 단계의 헌법 점검(Constitution Check)은 위 7개 원칙 준수를 확인해야 한다.
 6. 구현 후 원칙 VI 의 갱신 의무 대상 표의 각 요소가 메시지 수신으로 갱신되는지 확인한다.
+7. 프런트엔드를 변경한 뒤에는 `ng build`가 외부 접속 없이 성공하는지, `dist`에 외부 CDN 주소의 자동 로드 참조가
+   없는지(원칙 VII) 확인한다.
 
 ## 거버넌스
 
@@ -126,4 +168,4 @@ MUST NOT 한다. 근거 분석(2026-10-02, `manager.component` 기준)은 다음
 - 모든 PR/리뷰는 원칙 준수 여부를 확인해야 하며, 위반은 plan 의 복잡도 추적 항목에서
   정당화되지 않는 한 허용되지 않는다.
 
-**Version**: 1.1.1 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-02
+**Version**: 1.2.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-07

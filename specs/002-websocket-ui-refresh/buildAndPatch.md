@@ -16,8 +16,8 @@ qssb 는 관리 콘솔 화면을 **직접 가지고 있지 않다.** 화면은 M
 
 ```text
 [이 저장소] quartz-manager-frontend (Angular 소스, 수정한 곳)
-      │  mvn -Pbuild-webjar-local-npm  (PC 의 Node/npm 으로 npm run build, 기본)
-      │  mvn -Pbuild-webjar            (Maven 이 Node 를 받아 npm install + build, --maven-node)
+      │  mvn -Pbuild-webjar            (기본: Maven 이 Node/npm 을 로컬 저장소 캐시에서 풀어 npm install + build)
+      │  mvn -Pbuild-webjar-local-npm  (--local-npm: PC 에 설치된 Node/npm 으로 npm run build)
       ▼
 quartz-manager-starter-ui-5.0.1.jar   → 로컬 ~/.m2 에 설치
       │
@@ -45,7 +45,7 @@ quartz-manager-starter-ui-5.0.1.jar   → 로컬 ~/.m2 에 설치
 | JDK | 25 (최소 21) | Maven 실행, qssb 빌드 | quartz-manager 는 `java.version=21`, qssb 는 JDK 25. **25 하나로 둘 다 가능** |
 | Maven | 3.9+ | webjar/qssb 빌드 | 대신 `quartz-manager-parent\mvnw.cmd` 사용 가능(설치 불필요) |
 | Git | 최신 | 소스 관리/clone(방법 B) | |
-| Node.js | 24.x(`^20.19` / `^22.12` / `>=24`) | `buildUI.bat` **기본 모드의 빌드**, `npm test` | PC 에 설치된 Node/npm 을 PATH 로 사용. `--maven-node` 모드에서만 Maven 이 Node v22.13.0 을 `target\tmp` 에 자동 설치(인터넷 필요) |
+| Node.js | 24.x(`^20.19` / `^22.12` / `>=24`) | `--local-npm` 모드의 빌드, `npm test` | 기본 모드(`build-webjar`)에서는 불필요: Maven 이 Node v22.13.0 / npm 10.9.0 을 **로컬 저장소 캐시**(`com\github\eirslett\node`, `\npm`)에서 `target\tmp` 로 풀어 사용(캐시에 없을 때만 다운로드) |
 | OpenSSH 클라이언트 또는 WinSCP | - | 서버 업로드(`scp`) | Windows 10/11 기본 포함(`ssh`, `scp`) |
 
 설치 예시(PowerShell, 관리자 권한 또는 사용자 권한):
@@ -127,14 +127,20 @@ cd C:\...\quartz-manager
 .\buildUI.bat                       # Maven 기본 로컬 저장소(%USERPROFILE%\.m2) 사용
 .\buildUI.bat D:\workspace\localrepo   # 지정한 로컬 저장소 사용 (portable/오프라인 저장소)
 .\buildUI.bat D:\workspace\localrepo --replace   # 빌드 전에 저장소의 기존 jar 를 .bak 로 백업한 뒤 교체
-.\buildUI.bat --maven-node                       # Maven 이 Node/npm 을 내려받는 기존 방식(-Pbuild-webjar)
+.\buildUI.bat D:\workspace\localrepo --local-npm  # PC 에 설치된 Node/npm 사용(-Pbuild-webjar-local-npm)
 ```
 
-**기본 모드는 PC 에 설치된 Node.js/npm(PATH)을 사용한다**(프로필 `build-webjar-local-npm`).
-- Node 다운로드가 없고, 프런트엔드를 `quartz-manager-frontend` 폴더에서 **제자리 빌드**한다(`target\tmp` 복사 없음 → Windows 경로 길이 문제 감소).
+**기본 모드는 Maven 이 관리하는 Node/npm 을 쓴다**(프로필 `build-webjar`, 원본 그대로).
+- `frontend-maven-plugin` 이 Node v22.13.0 / npm 10.9.0 을 **로컬 Maven 저장소 캐시**
+  (`<저장소>\com\github\eirslett\node\22.13.0\`, `...\npm\10.9.0\`)에서 꺼내 `quartz-manager-starter-ui\target\tmp` 에 풀고,
+  **캐시에 없을 때만** 다운로드한다. 이어서 같은 곳에서 `npm install` 과 `npm run build` 를 실행한다.
+- 주의: **`npm install` 은 npm 레지스트리(또는 npm 캐시)가 필요**하다. Node 가 캐시되어 있어도 이 단계는 인터넷이 필요할 수 있다.
+- 스크립트는 시작할 때 저장소에 `frontend-maven-plugin 1.11.0`, `node\22.13.0`, `npm\10.9.0` 이 있는지 확인해 없으면 `[WARN]` 을 낸다.
+
+`--local-npm`(`-n`)을 주면 **PC 에 설치된 Node.js/npm(PATH)** 을 쓴다(프로필 `build-webjar-local-npm`).
+- Node 다운로드/압축 해제 없이 프런트엔드를 `quartz-manager-frontend` 폴더에서 **제자리 빌드**한다(`target\tmp` 복사 없음).
 - 시작 시 `node`/`npm` 존재와 Node 버전(`^20.19` / `^22.12` / `>=24`)을 확인한다.
-- `quartz-manager-frontend\node_modules` 가 **있으면 `npm ci` 를 건너뛰고** 기존 것을 쓴다(인터넷 불필요).
-  없으면 `npm ci` 를 실행하며 npm 레지스트리(또는 npm 캐시)가 필요하다. 강제로 다시 설치하려면 `node_modules` 폴더를 지운다.
+- `quartz-manager-frontend\node_modules` 가 **있으면 `npm ci` 를 건너뛴다**.
 - `exec-maven-plugin 3.5.0` 이 로컬 저장소에 있어야 한다(처음 한 번만 다운로드).
 
 `--replace`(또는 `-r`)를 주면 로컬 저장소에 이미 있는 `quartz-manager-starter-ui-5.0.1.jar` 를
@@ -154,7 +160,7 @@ cd quartz-manager-parent
 
 Maven 을 설치했다면 `mvn -DskipTests -Pbuild-webjar -pl quartz-manager-starter-ui -am install` 도 동일하다.
 
-`--maven-node` 모드의 내부 동작: `quartz-manager-frontend` 를 `quartz-manager-starter-ui\target\tmp` 로 복사(`node_modules`, `dist` 제외)
+기본 모드(`build-webjar`)의 내부 동작: `quartz-manager-frontend` 를 `quartz-manager-starter-ui\target\tmp` 로 복사(`node_modules`, `dist` 제외)
 → Node v22.13.0 자동 설치 → `npm install` → `npm run build` → 결과를
 `META-INF/resources/quartz-manager-ui/` 로 이동 → jar 로 패키징 → `%USERPROFILE%\.m2` 에 설치. 약 1~2분.
 
@@ -306,9 +312,9 @@ sudo -u qssb ./start.sh
 | 증상 | 원인 / 조치 |
 |------|-------------|
 | 빌드한 jar 가 5KB 미만 | `-Pbuild-webjar` 를 빼먹었거나 node/npm 단계 실패. Maven 로그에서 `install node and npm`, `npm install`, `npm run build` 단계 확인. 프록시 설정 확인(§2-1) |
-| `node or npm not found on PATH` / `Unsupported Node.js version` (기본 모드) | Node.js 가 PATH 에 없거나 버전이 낮음. `node -v` 확인 후 `^20.19` / `^22.12` / `>=24` 설치, 또는 `--maven-node` 사용 |
-| 기본 모드에서 `npm ci` 가 실패 | `node_modules` 가 없어 레지스트리 접속이 필요. 프록시/레지스트리 설정(`npm config`) 후 재시도하거나, 인터넷 PC 에서 설치한 같은 OS 의 `node_modules` 를 `quartz-manager-frontend` 에 복사(그러면 `npm ci` 를 건너뜀) |
-| 기본 모드에서 `npm run build` 실패 | 프런트엔드 폴더에서 직접 `npm run build` 를 실행해 같은 오류가 나는지 확인(소스/의존성 문제인지 구분) |
+| `node or npm not found on PATH` / `Unsupported Node.js version` (`--local-npm` 모드) | Node.js 가 PATH 에 없거나 버전이 낮음. `node -v` 확인 후 `^20.19` / `^22.12` / `>=24` 설치,  또는 `--local-npm` 없이(기본 모드) 실행 |
+| `--local-npm` 모드에서 `npm ci` 가 실패 | `node_modules` 가 없어 레지스트리 접속이 필요. 프록시/레지스트리 설정(`npm config`) 후 재시도하거나, 인터넷 PC 에서 설치한 같은 OS 의 `node_modules` 를 `quartz-manager-frontend` 에 복사(그러면 `npm ci` 를 건너뜀) |
+| `--local-npm` 모드에서 `npm run build` 실패 | 프런트엔드 폴더에서 직접 `npm run build` 를 실행해 같은 오류가 나는지 확인(소스/의존성 문제인지 구분) |
 | `Cannot download Node` / `npm install` 실패 | 인터넷/프록시 문제. `settings.xml` 프록시와 `npm config` 확인 |
 | `invalid target release: 21/25` | `JAVA_HOME` 이 JDK 21 이상을 가리키는지 확인 |
 | 새 코드가 안 보임 | (1) 방법 B 인데 push 안 함, (2) 서버 jar 교체 후 재기동 안 함, (3) 브라우저/nginx 캐시. §7 확인 |
