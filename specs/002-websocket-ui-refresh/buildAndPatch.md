@@ -16,7 +16,8 @@ qssb 는 관리 콘솔 화면을 **직접 가지고 있지 않다.** 화면은 M
 
 ```text
 [이 저장소] quartz-manager-frontend (Angular 소스, 수정한 곳)
-      │  mvn -Pbuild-webjar  (npm install + npm run build 를 내부에서 수행)
+      │  mvn -Pbuild-webjar-local-npm  (PC 의 Node/npm 으로 npm run build, 기본)
+      │  mvn -Pbuild-webjar            (Maven 이 Node 를 받아 npm install + build, --maven-node)
       ▼
 quartz-manager-starter-ui-5.0.1.jar   → 로컬 ~/.m2 에 설치
       │
@@ -44,7 +45,7 @@ quartz-manager-starter-ui-5.0.1.jar   → 로컬 ~/.m2 에 설치
 | JDK | 25 (최소 21) | Maven 실행, qssb 빌드 | quartz-manager 는 `java.version=21`, qssb 는 JDK 25. **25 하나로 둘 다 가능** |
 | Maven | 3.9+ | webjar/qssb 빌드 | 대신 `quartz-manager-parent\mvnw.cmd` 사용 가능(설치 불필요) |
 | Git | 최신 | 소스 관리/clone(방법 B) | |
-| Node.js | 22.x LTS | (선택) `npm test` 로컬 실행 | webjar 빌드용 Node 는 Maven 플러그인이 `target\tmp` 에 **자동 설치**(v22.13.0, 인터넷 필요) |
+| Node.js | 24.x(`^20.19` / `^22.12` / `>=24`) | `buildUI.bat` **기본 모드의 빌드**, `npm test` | PC 에 설치된 Node/npm 을 PATH 로 사용. `--maven-node` 모드에서만 Maven 이 Node v22.13.0 을 `target\tmp` 에 자동 설치(인터넷 필요) |
 | OpenSSH 클라이언트 또는 WinSCP | - | 서버 업로드(`scp`) | Windows 10/11 기본 포함(`ssh`, `scp`) |
 
 설치 예시(PowerShell, 관리자 권한 또는 사용자 권한):
@@ -126,7 +127,15 @@ cd C:\...\quartz-manager
 .\buildUI.bat                       # Maven 기본 로컬 저장소(%USERPROFILE%\.m2) 사용
 .\buildUI.bat D:\workspace\localrepo   # 지정한 로컬 저장소 사용 (portable/오프라인 저장소)
 .\buildUI.bat D:\workspace\localrepo --replace   # 빌드 전에 저장소의 기존 jar 를 .bak 로 백업한 뒤 교체
+.\buildUI.bat --maven-node                       # Maven 이 Node/npm 을 내려받는 기존 방식(-Pbuild-webjar)
 ```
+
+**기본 모드는 PC 에 설치된 Node.js/npm(PATH)을 사용한다**(프로필 `build-webjar-local-npm`).
+- Node 다운로드가 없고, 프런트엔드를 `quartz-manager-frontend` 폴더에서 **제자리 빌드**한다(`target\tmp` 복사 없음 → Windows 경로 길이 문제 감소).
+- 시작 시 `node`/`npm` 존재와 Node 버전(`^20.19` / `^22.12` / `>=24`)을 확인한다.
+- `quartz-manager-frontend\node_modules` 가 **있으면 `npm ci` 를 건너뛰고** 기존 것을 쓴다(인터넷 불필요).
+  없으면 `npm ci` 를 실행하며 npm 레지스트리(또는 npm 캐시)가 필요하다. 강제로 다시 설치하려면 `node_modules` 폴더를 지운다.
+- `exec-maven-plugin 3.5.0` 이 로컬 저장소에 있어야 한다(처음 한 번만 다운로드).
 
 `--replace`(또는 `-r`)를 주면 로컬 저장소에 이미 있는 `quartz-manager-starter-ui-5.0.1.jar` 를
 `quartz-manager-starter-ui-5.0.1.jar.bak.<타임스탬프>` 로 같은 폴더에 백업한 뒤 새 jar 로 교체한다
@@ -135,7 +144,7 @@ cd C:\...\quartz-manager
 파라미터로 로컬 저장소 경로를 주면 Maven 에 `-Dmaven.repo.local` 로 전달하고, 빌드된 jar 도 그 저장소에
 설치되며 스크립트의 검증 단계도 그 경로의 jar 를 확인한다.
 
-`buildUI.bat` 은 JDK 확인 → (`mvn` 이 없으면 `mvnw.cmd` 사용) 빌드·설치 → jar 크기(4MB 이상)와
+`buildUI.bat` 은 JDK 확인 → (`mvn` 이 없으면 `mvnw.cmd` 사용) 빌드·설치 → jar 크기(1MB 이상)와
 번들 안의 `Last fired:` 문구 확인(§4-1)까지 자동으로 수행한다. 직접 실행하려면 아래와 같다.
 
 ```powershell
@@ -145,7 +154,7 @@ cd quartz-manager-parent
 
 Maven 을 설치했다면 `mvn -DskipTests -Pbuild-webjar -pl quartz-manager-starter-ui -am install` 도 동일하다.
 
-내부 동작: `quartz-manager-frontend` 를 `quartz-manager-starter-ui\target\tmp` 로 복사(`node_modules`, `dist` 제외)
+`--maven-node` 모드의 내부 동작: `quartz-manager-frontend` 를 `quartz-manager-starter-ui\target\tmp` 로 복사(`node_modules`, `dist` 제외)
 → Node v22.13.0 자동 설치 → `npm install` → `npm run build` → 결과를
 `META-INF/resources/quartz-manager-ui/` 로 이동 → jar 로 패키징 → `%USERPROFILE%\.m2` 에 설치. 약 1~2분.
 
@@ -173,7 +182,7 @@ $jar = "$env:USERPROFILE\.m2\repository\it\fabioformosa\quartz-manager\quartz-ma
 Get-Item $jar | Select-Object Length, LastWriteTime
 ```
 
-- **크기가 4MB 이상**이어야 정상이다. 5KB 미만이면 빈 웹자(node/npm 실패)이므로 §9 를 본다.
+- **크기가 1MB 이상**이어야 정상이다(정상 빌드는 약 2.8MB). 5KB 미만이면 빈 웹자(npm 빌드 실패)이므로 §9 를 본다.
 - **LastWriteTime 이 방금 시각**이어야 한다(오래된 jar 이면 install 이 안 된 것).
 
 변경 코드 포함 여부 확인(번들 안에 새 문구가 있는지):
@@ -297,6 +306,9 @@ sudo -u qssb ./start.sh
 | 증상 | 원인 / 조치 |
 |------|-------------|
 | 빌드한 jar 가 5KB 미만 | `-Pbuild-webjar` 를 빼먹었거나 node/npm 단계 실패. Maven 로그에서 `install node and npm`, `npm install`, `npm run build` 단계 확인. 프록시 설정 확인(§2-1) |
+| `node or npm not found on PATH` / `Unsupported Node.js version` (기본 모드) | Node.js 가 PATH 에 없거나 버전이 낮음. `node -v` 확인 후 `^20.19` / `^22.12` / `>=24` 설치, 또는 `--maven-node` 사용 |
+| 기본 모드에서 `npm ci` 가 실패 | `node_modules` 가 없어 레지스트리 접속이 필요. 프록시/레지스트리 설정(`npm config`) 후 재시도하거나, 인터넷 PC 에서 설치한 같은 OS 의 `node_modules` 를 `quartz-manager-frontend` 에 복사(그러면 `npm ci` 를 건너뜀) |
+| 기본 모드에서 `npm run build` 실패 | 프런트엔드 폴더에서 직접 `npm run build` 를 실행해 같은 오류가 나는지 확인(소스/의존성 문제인지 구분) |
 | `Cannot download Node` / `npm install` 실패 | 인터넷/프록시 문제. `settings.xml` 프록시와 `npm config` 확인 |
 | `invalid target release: 21/25` | `JAVA_HOME` 이 JDK 21 이상을 가리키는지 확인 |
 | 새 코드가 안 보임 | (1) 방법 B 인데 push 안 함, (2) 서버 jar 교체 후 재기동 안 함, (3) 브라우저/nginx 캐시. §7 확인 |
@@ -311,7 +323,7 @@ sudo -u qssb ./start.sh
 - [ ] JDK 25 / Maven(또는 `mvnw.cmd`) / Git 설치 확인 (로컬 Windows)
 - [ ] `git status` 로 변경 파일이 의도한 2개인지 확인
 - [ ] §4 방법 A(또는 B)로 `quartz-manager-starter-ui-5.0.1.jar` 빌드·설치
-- [ ] jar 크기 4MB 이상 + `Last fired:` 문구 포함 확인
+- [ ] jar 크기 1MB 이상 + `Last fired:` 문구 포함 확인
 - [ ] `scp` 로 서버 `/tmp` 업로드
 - [ ] 서버 정지 → 백업(lib 밖) → 교체 → 소유권/`restorecon` → 기동
 - [ ] 브라우저 강제 새로고침 후 새 `main.<해시>.js` 확인, quickstart 시나리오 수행

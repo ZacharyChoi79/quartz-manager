@@ -55,3 +55,15 @@
 ## 변경하지 않은 것 (FR-009 확인)
 
 WebSocket 연결·인증(`access_token`)·재연결 설정과 `services/*`, `model/*`, `app.module.ts`, `progress-panel`/`logs-panel`, 로그 구독·표시, 구독 해제 로직, 스타일, 의존성, 빌드·테스트 설정, qssb, nginx.
+
+## 빌드 도구 변경 (spec 002 수정 허용 범위 밖 — 사용자 요청에 따른 추가)
+
+헌법 원칙 III(최소 수정)에 따라 기존 동작은 바꾸지 않고 **프로필 추가**로 구현했다.
+
+| 파일 | 변경 | 사유 |
+|------|------|------|
+| `quartz-manager-parent/quartz-manager-starter-ui/pom.xml` | 프로필 `build-webjar-local-npm` 추가(기존 `build-webjar` 불변). `exec-maven-plugin` 으로 PC 의 npm(`npm ci`/`npm run build`)을 프런트엔드 폴더에서 직접 실행, 결과 `dist` 를 `META-INF/resources/quartz-manager-ui` 로 복사 | Node 다운로드/`target\tmp` 복사 없이 설치된 Node/npm 사용 (Windows 에서 다운로드·경로 길이 문제 회피) |
+| `buildUI.bat` (신규) | 기본 모드를 로컬 Node/npm 으로 하고 `--maven-node`/`-m` 로 기존 방식 선택, Node 버전 확인, `node_modules` 가 있으면 `npm ci` 생략, 로컬 저장소 경로 파라미터와 `--replace`(백업 후 교체) 지원, jar 검증 | Windows 에서의 빌드·적용 자동화 |
+| `specs/002-websocket-ui-refresh/buildAndPatch.md` (신규) | 빌드·적용 가이드 | 운영 반영 절차 문서화 |
+
+검증: Mac 에서 `mvn -Pbuild-webjar-local-npm -Dfrontend.skipInstall=true -Dnpm.shell=sh -Dnpm.shell.arg=-c -pl quartz-manager-starter-ui -am package` 가 성공하고, 생성된 jar(약 2.86MB)의 `main.768204f5aff9c1b1.js` 에 `Last fired:` 문구가 포함됨을 확인했다. **Windows(`cmd /c`) 경로와 `buildUI.bat` 은 이 환경에서 실행해 보지 못했다.**

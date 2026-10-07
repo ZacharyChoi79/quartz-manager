@@ -134,6 +134,111 @@
           </plugins>
         </build>
       </profile>
+
+      <!--
+        Same result as build-webjar, but uses the Node.js/npm already installed on this machine (PATH)
+        instead of downloading Node/npm through frontend-maven-plugin. The frontend is built in place
+        (no copy to target/tmp). Requirements: Node ^20.19 / ^22.12 / >=24 and npm on PATH.
+        Usage: mvn -Pbuild-webjar-local-npm [-Dfrontend.skipInstall=true] -pl quartz-manager-starter-ui -am install
+        Default shell is Windows (cmd /c); on Linux/macOS add -Dnpm.shell=sh -Dnpm.shell.arg=-c
+      -->
+      <profile>
+        <id>build-webjar-local-npm</id>
+        <properties>
+          <!-- true: skip "npm ci" (use the existing node_modules) -->
+          <frontend.skipInstall>false</frontend.skipInstall>
+          <npm.shell>cmd</npm.shell>
+          <npm.shell.arg>/c</npm.shell.arg>
+        </properties>
+        <build>
+          <plugins>
+
+            <!-- STEP1: remove a previously built UI from the output directory -->
+            <plugin>
+              <artifactId>maven-antrun-plugin</artifactId>
+              <version>1.8</version>
+              <executions>
+                <execution>
+                  <id>clean previous ui</id>
+                  <phase>generate-resources</phase>
+                  <configuration>
+                    <target>
+                      <delete dir="${project.build.outputDirectory}/META-INF/resources/quartz-manager-ui" />
+                    </target>
+                  </configuration>
+                  <goals>
+                    <goal>run</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+
+            <!-- STEP2: run the locally installed npm in the frontend folder -->
+            <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>exec-maven-plugin</artifactId>
+              <version>3.5.0</version>
+              <executions>
+                <execution>
+                  <id>local npm ci</id>
+                  <phase>generate-resources</phase>
+                  <goals>
+                    <goal>exec</goal>
+                  </goals>
+                  <configuration>
+                    <skip>${frontend.skipInstall}</skip>
+                    <executable>${npm.shell}</executable>
+                    <workingDirectory>${basedir}/../../${frontend.folderName}</workingDirectory>
+                    <arguments>
+                      <argument>${npm.shell.arg}</argument>
+                      <argument>npm ci</argument>
+                    </arguments>
+                  </configuration>
+                </execution>
+                <execution>
+                  <id>local npm run build</id>
+                  <phase>generate-resources</phase>
+                  <goals>
+                    <goal>exec</goal>
+                  </goals>
+                  <configuration>
+                    <executable>${npm.shell}</executable>
+                    <workingDirectory>${basedir}/../../${frontend.folderName}</workingDirectory>
+                    <arguments>
+                      <argument>${npm.shell.arg}</argument>
+                      <argument>npm run build</argument>
+                    </arguments>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+
+            <!-- STEP3: copy the built UI (dist) into the META-INF folder of the webjar -->
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-resources-plugin</artifactId>
+              <version>2.6</version>
+              <executions>
+                <execution>
+                  <id>copy-local-built-ui</id>
+                  <phase>process-resources</phase>
+                  <goals>
+                    <goal>copy-resources</goal>
+                  </goals>
+                  <configuration>
+                    <outputDirectory>${project.build.outputDirectory}/META-INF/resources/quartz-manager-ui</outputDirectory>
+                    <resources>
+                      <resource>
+                        <directory>${basedir}/../../${frontend.folderName}/dist</directory>
+                      </resource>
+                    </resources>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
    </profiles>
 
 </project>

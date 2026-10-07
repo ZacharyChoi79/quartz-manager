@@ -13,13 +13,21 @@ rem
 rem Unlike qssb's buildQuartzManager.bat, this script does NOT clone the GitHub
 rem fork, so local (not yet pushed) changes are included.
 rem
+rem By default the Node.js/npm installed on this PC (PATH) is used (profile
+rem build-webjar-local-npm): no Node download, and the frontend is built in place.
+rem Use --maven-node to let Maven download Node/npm instead (profile build-webjar).
+rem
 rem Requirements: JDK 21+ (25 recommended) on PATH or JAVA_HOME. Maven is optional
-rem (falls back to quartz-manager-parent\mvnw.cmd). Internet access is needed:
-rem the frontend-maven-plugin downloads Node v22.13.0 and runs npm install.
+rem (falls back to quartz-manager-parent\mvnw.cmd). Node.js ^20.19 / ^22.12 / >=24
+rem and npm on PATH (default mode). If quartz-manager-frontend\node_modules exists,
+rem "npm ci" is skipped and the existing node_modules is used (delete the folder to
+rem force a clean "npm ci", which needs the npm registry or a populated npm cache).
 rem
 rem Usage:
-rem   buildUI.bat [LOCAL_REPO_PATH] [--replace]
+rem   buildUI.bat [LOCAL_REPO_PATH] [--replace] [--maven-node]
 rem
+rem   --maven-node, -m Optional. Use the Maven-managed Node/npm (-Pbuild-webjar):
+rem                    downloads Node v22.13.0 and runs npm install (needs internet).
 rem   --replace, -r    Optional. Before building, back up the existing
 rem                    quartz-manager-starter-ui-5.0.1.jar in the local repository to
 rem                    <jar>.bak.<timestamp> (next to it), then let the build replace
@@ -33,11 +41,13 @@ rem   Examples:
 rem     buildUI.bat
 rem     buildUI.bat D:\workspace\localrepo
 rem     buildUI.bat D:\workspace\localrepo --replace
+rem     buildUI.bat --maven-node
 rem
 rem Run this script from the quartz-manager repository root (where it lives).
 
 set "LOCAL_REPO="
 set "REPLACE="
+set "MAVEN_NODE="
 set "REPO_ARG=-Dbuildui.default.repo=true"
 set "REPO_ROOT=%USERPROFILE%\.m2\repository"
 
@@ -48,10 +58,15 @@ if /i "%~1"=="-h" goto usage
 if /i "%~1"=="--help" goto usage
 if /i "%~1"=="--replace" goto optreplace
 if /i "%~1"=="-r" goto optreplace
+if /i "%~1"=="--maven-node" goto optmavennode
+if /i "%~1"=="-m" goto optmavennode
 for %%I in ("%~1") do set "LOCAL_REPO=%%~fI"
 goto nextarg
 :optreplace
 set "REPLACE=1"
+goto nextarg
+:optmavennode
+set "MAVEN_NODE=1"
 :nextarg
 shift
 goto parse
@@ -66,7 +81,7 @@ echo [buildUI] Maven local repository: %REPO_ROOT%
 set "PARENT_DIR=%SCRIPT_DIR%quartz-manager-parent"
 set "JAR_PATH=%REPO_ROOT%\it\fabioformosa\quartz-manager\quartz-manager-starter-ui\5.0.1\quartz-manager-starter-ui-5.0.1.jar"
 set "CHECK_DIR=%TEMP%\quartz-manager-ui-check"
-set "MIN_JAR_BYTES=4000000"
+set "MIN_JAR_BYTES=1000000"
 
 if not exist "%PARENT_DIR%\pom.xml" (
     echo [buildUI][ERROR] quartz-manager-parent\pom.xml not found. Run this script from the quartz-manager repository root.
@@ -79,6 +94,32 @@ if not exist "%SCRIPT_DIR%quartz-manager-frontend\package.json" (
 
 echo [buildUI] Checking required tools...
 where java >nul 2>&1 || (echo [buildUI][ERROR] java not found on PATH. Install JDK 25 ^(minimum 21^) and set JAVA_HOME. & exit /b 1)
+
+set "BUILD_PROFILE=-Pbuild-webjar-local-npm"
+set "SKIP_INSTALL=false"
+if defined MAVEN_NODE goto skipnodecheck
+set "BUILD_PROFILE=-Pbuild-webjar-local-npm"
+where node >nul 2>&1
+if errorlevel 1 goto nonode
+where npm >nul 2>&1
+if errorlevel 1 goto nonode
+set "NODE_MAJOR=0"
+set "NODE_MINOR=0"
+for /f "tokens=1,2 delims=v." %%A in ('node -v') do set "NODE_MAJOR=%%A" & set "NODE_MINOR=%%B"
+set "NODE_OK=0"
+if %NODE_MAJOR% GEQ 24 set "NODE_OK=1"
+if %NODE_MAJOR% EQU 22 if %NODE_MINOR% GEQ 12 set "NODE_OK=1"
+if %NODE_MAJOR% EQU 20 if %NODE_MINOR% GEQ 19 set "NODE_OK=1"
+if "%NODE_OK%"=="0" goto badnode
+echo [buildUI] Using the local Node.js v%NODE_MAJOR%.%NODE_MINOR% and npm from PATH.
+if exist "%SCRIPT_DIR%quartz-manager-frontend\node_modules\" set "SKIP_INSTALL=true"
+if "%SKIP_INSTALL%"=="true" echo [buildUI] node_modules found: skipping npm ci.
+if "%SKIP_INSTALL%"=="false" echo [buildUI] node_modules not found: npm ci will run ^(needs the npm registry or an npm cache^).
+goto nodechecked
+:skipnodecheck
+set "BUILD_PROFILE=-Pbuild-webjar"
+echo [buildUI] --maven-node: Maven will download Node/npm ^(needs internet^).
+:nodechecked
 
 set "MVN_CMD="
 where mvn >nul 2>&1 && set "MVN_CMD=mvn"
@@ -97,11 +138,11 @@ call :backup_existing_jar
 if errorlevel 1 exit /b 1
 :skipbackup
 
-echo [buildUI] Building the UI webjar with -Pbuild-webjar ^(npm install + npm run build, about 1-2 minutes^)...
+echo [buildUI] Building the UI webjar ^(%BUILD_PROFILE%^)...
 pushd "%PARENT_DIR%"
-call "%MVN_CMD%" "%REPO_ARG%" -DskipTests -Pbuild-webjar -pl quartz-manager-starter-ui -am install
+call "%MVN_CMD%" "%REPO_ARG%" "%BUILD_PROFILE%" "-Dfrontend.skipInstall=%SKIP_INSTALL%" -DskipTests -pl quartz-manager-starter-ui -am install
 if errorlevel 1 (
-    echo [buildUI][ERROR] Maven build failed. Check the log above ^(node download / npm install / npm run build steps^).
+    echo [buildUI][ERROR] Maven build failed. Check the log above ^(npm ci / npm run build, or the Node download in --maven-node mode^).
     popd
     exit /b 1
 )
@@ -118,7 +159,7 @@ set "JAR_BYTES=0"
 for %%F in ("%JAR_PATH%") do set "JAR_BYTES=%%~zF"
 echo [buildUI] Jar size: %JAR_BYTES% bytes
 if %JAR_BYTES% LSS %MIN_JAR_BYTES% (
-    echo [buildUI][ERROR] Jar is smaller than 4MB. The webjar is probably empty ^(node/npm step failed^).
+    echo [buildUI][ERROR] Jar is smaller than 1MB. The webjar is probably empty ^(the npm build step failed^).
     exit /b 1
 )
 
@@ -151,11 +192,20 @@ echo       ^(see section 5 of specs\002-websocket-ui-refresh\buildAndPatch.md^).
 goto end
 
 :usage
-echo Usage: buildUI.bat [LOCAL_REPO_PATH] [--replace]
+echo Usage: buildUI.bat [LOCAL_REPO_PATH] [--replace] [--maven-node]
 echo   LOCAL_REPO_PATH  Optional Maven local repository ^(-Dmaven.repo.local^). Default: Maven's default repository.
 echo   --replace, -r    Back up the existing jar in the local repository as ^<jar^>.bak.^<timestamp^>, then replace it.
+echo   --maven-node, -m Use the Maven-managed Node/npm ^(-Pbuild-webjar, needs internet^) instead of the local Node.js.
 echo   Example: buildUI.bat D:\workspace\localrepo --replace
 goto end
+
+:nonode
+echo [buildUI][ERROR] node or npm not found on PATH. Install Node.js ^(^20.19 / ^22.12 / ^>=24^), or use --maven-node.
+exit /b 1
+
+:badnode
+echo [buildUI][ERROR] Unsupported Node.js version v%NODE_MAJOR%.%NODE_MINOR%. Use ^20.19, ^22.12 or ^>=24, or use --maven-node.
+exit /b 1
 
 :backup_existing_jar
 if not exist "%JAR_PATH%" goto nobackup
