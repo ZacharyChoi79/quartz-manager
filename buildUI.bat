@@ -119,7 +119,11 @@ goto nodechecked
 :skipnodecheck
 set "BUILD_PROFILE=-Pbuild-webjar"
 echo [buildUI] --maven-node: Maven will download Node/npm ^(needs internet^).
+goto nodechecked
 :nodechecked
+if defined MAVEN_NODE goto preflightdone
+if not exist "%REPO_ROOT%\org\codehaus\mojo\exec-maven-plugin\3.5.0\exec-maven-plugin-3.5.0.jar" echo [buildUI][WARN] exec-maven-plugin 3.5.0 is not in the local repository ^(%REPO_ROOT%^). Maven must download it once: internet or a proxy is required.
+:preflightdone
 
 set "MVN_CMD="
 where mvn >nul 2>&1 && set "MVN_CMD=mvn"
@@ -139,14 +143,14 @@ if errorlevel 1 exit /b 1
 :skipbackup
 
 echo [buildUI] Building the UI webjar ^(%BUILD_PROFILE%^)...
+set "LOG_FILE=%SCRIPT_DIR%buildUI.log"
+echo [buildUI] Maven output is saved to: %LOG_FILE% ^(it is shown after the build finishes^)
 pushd "%PARENT_DIR%"
-call "%MVN_CMD%" "%REPO_ARG%" "%BUILD_PROFILE%" "-Dfrontend.skipInstall=%SKIP_INSTALL%" -DskipTests -pl quartz-manager-starter-ui -am install
-if errorlevel 1 (
-    echo [buildUI][ERROR] Maven build failed. Check the log above ^(npm ci / npm run build, or the Node download in --maven-node mode^).
-    popd
-    exit /b 1
-)
+call "%MVN_CMD%" "%REPO_ARG%" "%BUILD_PROFILE%" "-Dfrontend.skipInstall=%SKIP_INSTALL%" -DskipTests -pl quartz-manager-starter-ui -am install > "%LOG_FILE%" 2>&1
+set "MVN_EXIT=%ERRORLEVEL%"
 popd
+if not "%MVN_EXIT%"=="0" goto mvnfailed
+echo [buildUI] Maven build OK. Full log: %LOG_FILE%
 
 echo.
 echo [buildUI] Verifying the built jar...
@@ -198,6 +202,20 @@ echo   --replace, -r    Back up the existing jar in the local repository as ^<ja
 echo   --maven-node, -m Use the Maven-managed Node/npm ^(-Pbuild-webjar, needs internet^) instead of the local Node.js.
 echo   Example: buildUI.bat D:\workspace\localrepo --replace
 goto end
+
+:mvnfailed
+echo.
+echo [buildUI][ERROR] Maven build failed ^(exit code %MVN_EXIT%^). Full log: %LOG_FILE%
+echo.
+echo ---- Lines containing errors ----
+findstr /i /c:"[ERROR]" /c:"npm ERR" /c:"Could not" /c:"Failed to execute" /c:"BUILD FAILURE" /c:"Cannot run program" "%LOG_FILE%"
+echo.
+echo ---- Last 40 lines of the log ----
+powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG_FILE%' -Tail 40"
+echo.
+echo Hints: exec-maven-plugin could not be resolved = needs internet/proxy once.
+echo        npm ERR network/ENOTFOUND = quartz-manager-frontend\node_modules is missing and the npm registry is unreachable.
+exit /b 1
 
 :nonode
 echo [buildUI][ERROR] node or npm not found on PATH. Install Node.js ^(^20.19 / ^22.12 / ^>=24^), or use --maven-node.
